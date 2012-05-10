@@ -63,7 +63,7 @@ function get() {
 						data += chunk;
 					});
 
-					res.on('end', function() {
+					res.once('end', function() {
 						ran++;
 						running--;
 						queryStatuses.push( (new Date) - queryTime);
@@ -71,7 +71,8 @@ function get() {
 				});
 
 				req.on('socket', function(socket) {
-					socket.on('connect', function(arg, arg2) {
+					socket.setMaxListeners(parallel);
+					socket.once('connect', function(arg, arg2) {
 						queryTime = new Date();
 					});
 				});
