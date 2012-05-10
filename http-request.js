@@ -6,9 +6,14 @@ process.on('SIGINT', function (){
 });
 process.on('exit', function (){
 	var runningTime = (new Date) - startTime;
+	console.log("------------------------");
 	console.log("ran " + ran + " queries");
 	console.log("running time:" + runningTime + "ms");
 	console.log(ran / runningTime * 1000 + "q/s" );
+
+	console.log("query time: " + queryStatuses[0]);
+	console.log("queryStatus length: " + queryStatuses.length);
+	console.log(queryStatuses);
 	;
 });
 
@@ -40,6 +45,7 @@ var running = 0;
 // 並列処理数
 var parallel = 30;
 
+var queryStatuses = new Array();
 var startTime = new Date();
 
 function get() {
@@ -47,9 +53,10 @@ function get() {
 		var i;
 		for(i = 0; i < 1000; i++){
 			if(running < parallel){
-				//console.log("queued. now running=" + running);
 				running++;
-				http.get(options, function(res){
+				var queryTime;
+		
+				var req = http.request(options, function(res){
 					var data;
 
 					res.on('data', function(chunk) {
@@ -59,15 +66,24 @@ function get() {
 					res.on('end', function() {
 						ran++;
 						running--;
-						//console.log("ran: " + ran);
+						queryStatuses.push( (new Date) - queryTime);
 					});
 				});
+
+				req.on('socket', function(socket) {
+					socket.on('connect', function(arg, arg2) {
+						queryTime = new Date();
+					});
+				});
+
+				req.end();
+
 			}else{
 				//console.log('max running.');
 			}
 
-			if (typeof(queryNum) != 'undefined' 
-					&& queryNum != null 
+			if (typeof(queryNum) != 'undefined'
+					&& queryNum != null
 					&& ran >= queryNum){
 				process.exit();
 			}
