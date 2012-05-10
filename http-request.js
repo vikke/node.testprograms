@@ -1,3 +1,9 @@
+/*
+ * Node.jsの挙動確認用tp。
+ *
+ * とりあえずhttpの負荷toolでも書いてみる。
+ */
+
 process.on('uncaughtException', function (err) {
 	  console.log('Caught exception: ' + err);
 });
@@ -13,15 +19,27 @@ process.on('exit', function (){
 
 	console.log("query time: " + queryStatuses[0]);
 	console.log("queryStatus length: " + queryStatuses.length);
-	console.log(queryStatuses);
-	;
+
+	console.log("not called connect evnet "
+		+ (function(){
+			var c = 0;
+			queryStatuses.forEach(function(v){
+				if (v === 'not called connect event.'){
+					++c;
+				}
+			});
+			return c;
+		})()
+		+ " times.");
+	//console.log(queryStatuses);
 });
 
 var http = require('http');
 
 // いいかげん引数処理
 if (process.argv.length != 5){
-	console.error('usage: node http-request.js host port url');
+	console.error('usage: node http-request.js host port url\n'
+			+ 'ex). node http-request.js example.com 8080 /index.html');
 	process.exit(-1);
 }
 
@@ -40,12 +58,14 @@ var ran = 0;
 var running = 0;
 
 // 投げたい数
-//var queryNum = 1000;
+var queryNum = 100;
 
 // 並列処理数
-var parallel = 30;
+var parallel = 10;
 
 var queryStatuses = new Array();
+
+// 実行総時間用開始時間
 var startTime = new Date();
 
 function get() {
@@ -66,18 +86,27 @@ function get() {
 					res.once('end', function() {
 						ran++;
 						running--;
-						queryStatuses.push( (new Date) - queryTime);
+						if (typeof(queryTime) == 'undefined'){
+							queryStatuses.push('not called connect event.');	
+						}else{
+							queryStatuses.push( (new Date) - queryTime);
+						}
 					});
 				});
+				req.end();
 
-				req.on('socket', function(socket) {
+				/*
+				req.once('connect', function(response, socket, head){
+					console.log('connect');
+					queryTime = new Date();	
+				});
+				*/
+				req.once('socket', function(socket) {
 					socket.setMaxListeners(parallel);
 					socket.once('connect', function(arg, arg2) {
 						queryTime = new Date();
 					});
 				});
-
-				req.end();
 
 			}else{
 				//console.log('max running.');
