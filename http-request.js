@@ -33,34 +33,12 @@ var running = 0;
 var queryNum = 50000;
 
 // 並列処理数
-var parallel = 100;
+var concurrency = 100;
 
 var keepalive = false;
 // }}}
 
-// {{{いいかげん引数処理
-// TODO:getopt。
-if (process.argv.length != 3){
-	console.error('usage: node http-request.js url\n'
-			+ 'ex). node http-request.js http://example.com:8080/index.html');
-	process.exit(-1);
-}
-var argUrl = url.parse(process.argv[2]);
-var headers = null;
-/// }}}
-
-// {{{query内容作成
-var options = argUrl;
-
-options.method = 'GET';
-var agent = new http.Agent();
-agent.maxSockets = parallel;
-
-options.agent = agent;
-if ( ! keepalive ) {
-	options.headers = { Connection: 'close'};	
-}
-//}}}
+var options = createQueryObject(process.argv);
 
 var queryStatuses = new Array();
 
@@ -104,6 +82,34 @@ function get() {
 
 }
 
-for(var i = 0; i < parallel; i++){
+function createQueryObject(argv) {
+
+	// {{{いいかげん引数処理
+	// TODO:getopt。
+	if (argv.length != 3){
+		console.error('usage: node http-request.js url\n'
+				+ 'ex). node http-request.js http://example.com:8080/index.html');
+		process.exit(1);
+	}
+	var args = url.parse(argv[2]);
+	var headers = null;
+	/// }}}
+
+	// {{{query内容作成
+
+	args.method = 'GET';
+	var agent = new http.Agent();
+	agent.maxSockets = concurrency;
+
+	args.agent = agent;
+	if ( ! keepalive ) {
+		args.headers = { Connection: 'close'};	
+	}
+	//}}}
+	
+	return args;
+}
+
+for(var i = 0; i < concurrency; i++){
 	get();
 }
