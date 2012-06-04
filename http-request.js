@@ -3,9 +3,12 @@
  *
  * とりあえずhttpの負荷toolでも書いてみる。
  */
+var http = require('http');
+var url = require('url');
 
+//{{{ 終了処理
 process.on('uncaughtException', function (err) {
-	  console.log('Caught exception: ' + err);
+	console.log('Caught exception: ' + err);
 });
 process.on('SIGINT', function (){
 	process.exit(0);
@@ -13,44 +16,13 @@ process.on('SIGINT', function (){
 process.on('exit', function (){
 	var runningTime = (new Date) - startTime;
 	console.log("------------------------");
-	console.log("ran " + ran + " queries");
-	console.log("running time:" + runningTime + "ms");
-	console.log(ran / runningTime * 1000 + "q/s" );
-
-	console.log("query time: " + queryStatuses[0]);
-	console.log("queryStatus length: " + queryStatuses.length);
-
-	console.log("not called connect evnet "
-		+ (function(){
-			var c = 0;
-			queryStatuses.forEach(function(v){
-				if (v === 'not called connect event.'){
-					++c;
-				}
-			});
-			return c;
-		})()
-		+ " times.");
-	//console.log(queryStatuses);
+	console.log("ran: " + ran + " queries");
+	console.log("running time: " + runningTime + 'ms ');
+	console.log(ran / runningTime * 1000 + 'q/s');
 });
+//}}}
 
-var http = require('http');
-
-// いいかげん引数処理
-if (process.argv.length != 5){
-	console.error('usage: node http-request.js host port url\n'
-			+ 'ex). node http-request.js example.com 8080 /index.html');
-	process.exit(-1);
-}
-
-var options = {
-	host: process.argv[2],
-	port: process.argv[3],
-	path: process.argv[4],
-	method: 'GET'
-};	
-
-
+// {{{ 初期値
 // 実行完了回数
 var ran = 0;
 
@@ -58,10 +30,37 @@ var ran = 0;
 var running = 0;
 
 // 投げたい数
-var queryNum = 100;
+var queryNum = 50000;
 
 // 並列処理数
-var parallel = 10;
+var parallel = 100;
+
+var keepalive = false;
+// }}}
+
+// {{{いいかげん引数処理
+// TODO:getopt。
+if (process.argv.length != 3){
+	console.error('usage: node http-request.js url\n'
+			+ 'ex). node http-request.js http://example.com:8080/index.html');
+	process.exit(-1);
+}
+var argUrl = url.parse(process.argv[2]);
+var headers = null;
+/// }}}
+
+// {{{query内容作成
+var options = argUrl;
+
+options.method = 'GET';
+var agent = new http.Agent();
+agent.maxSockets = parallel;
+
+options.agent = agent;
+if ( ! keepalive ) {
+	options.headers = { Connection: 'close'};	
+}
+//}}}
 
 var queryStatuses = new Array();
 
@@ -69,59 +68,42 @@ var queryStatuses = new Array();
 var startTime = new Date();
 
 function get() {
-	process.nextTick(function() {
-		var i;
-		for(i = 0; i < 1000; i++){
-			if(running < parallel){
-				running++;
-				var queryTime;
-		
-				var req = http.request(options, function(res){
-					var data;
 
-					res.on('data', function(chunk) {
-						data += chunk;
-					});
+	if ( --queryNum < 0 ) {
+		return;
+	}
 
-					res.once('end', function() {
-						ran++;
-						running--;
-						if (typeof(queryTime) == 'undefined'){
-							queryStatuses.push('not called connect event.');	
-						}else{
-							queryStatuses.push( (new Date) - queryTime);
-						}
-					});
-				});
-				req.end();
+	var req = http.request(options, function(res) {
+		//{{{ response data
+		var data;
+		res.on('data', function(chunk) {
+			data += chunk;
+			// TODO:
+			;		
+		});	
+		///}}}
 
-				/*
-				req.once('connect', function(response, socket, head){
-					console.log('connect');
-					queryTime = new Date();	
-				});
-				*/
-				req.once('socket', function(socket) {
-					socket.setMaxListeners(parallel);
-					socket.once('connect', function(arg, arg2) {
-						queryTime = new Date();
-					});
-				});
-
-			}else{
-				//console.log('max running.');
-			}
-
-			if (typeof(queryNum) != 'undefined'
-					&& queryNum != null
-					&& ran >= queryNum){
-				process.exit();
-			}
-		}
-		get();
+		//{{{ response end
+		res.on('end', function() {
+			ran++;
+			// next query
+			get();
+			// TODO:
+			;
+		});
+		//}}}
 	});
+	req.end();
+
+	//{{{ request connect event
+	req.once('connect', function(socket) {
+		// TODO:
+		;
+	});
+	///}}}
+
 }
 
-get();
-
-
+for(var i = 0; i < parallel; i++){
+	get();
+}
