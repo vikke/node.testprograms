@@ -6,87 +6,113 @@
 var http = require('http');
 var url = require('url');
 
+
 //{{{ 終了処理
-process.on('uncaughtException', function (err) {
-	console.log('Caught exception: ' + err);
-});
+//process.on('uncaughtException', function (err) {
+//	console.log('Caught exception: ' + err);
+//	process.exit(10);
+//});
+
 process.on('SIGINT', function (){
-	process.exit(0);
+	process.exit(2);
 });
 process.on('exit', function (){
+	if (params == null) return;
+
 	var runningTime = (new Date) - startTime;
-	console.log("------------------------");
-	console.log("ran: " + ran + " queries");
-	console.log("running time: " + runningTime + 'ms ');
-	console.log(ran / runningTime * 1000 + 'q/s');
+	console.log('------------------------');
+	console.log('ran: ' + params.ran + ' queries');
+	console.log('running time: ' + runningTime + 'ms ');
+	console.log(params.ran / runningTime * 1000 + 'q/s');
 });
 //}}}
 
 // {{{ 初期値
-// 実行完了回数
-var ran = 0;
+var params = {
+	ran: 0,	// 実行完了回数
+	concurrency: 20,	// 並列処理数
+	queryNum: 500,	// 処理数
+	keepalive: false,	// keepalive
+	res: 0
+};
 
-// 現在queryを投げている最中の数
-var running = 0;
-
-// 投げたい数
-var queryNum = 50000;
-
-// 並列処理数
-var concurrency = 100;
-
-var keepalive = false;
+var queryStatuses = new Array();	
+var startTime = new Date();
 // }}}
 
-var options = createQueryObject(process.argv);
+var queryObject = createQueryObject(process.argv);
 
-var queryStatuses = new Array();
+for(var i = 0; i < params.concurrency; i++){
+	get(queryObject);
+}
 
-// 実行総時間用開始時間
-var startTime = new Date();
-
-function get() {
-
-	if ( --queryNum < 0 ) {
+// {{{ get()
+function get(options) {
+	
+	if ( --params.queryNum < 0 ) {
 		return;
 	}
 
+	var statusLogger;
 	var req = http.request(options, function(res) {
-		//{{{ response data
+		
 		var data;
 		res.on('data', function(chunk) {
 			data += chunk;
 			// TODO:
 			;		
 		});	
-		///}}}
 
-		//{{{ response end
 		res.on('end', function() {
-			ran++;
+			params.ran++;
+			statusLogger();
 			// next query
-			get();
-			// TODO:
-			;
+			get(options);
 		});
-		//}}}
 	});
+
+	req.on('response', function(res){
+		params.res++;
+	});
+	req.on('socket', function(socket){
+		statusLogger = startLogger();	
+	});
+
 	req.end();
-
-	//{{{ request connect event
-	req.once('connect', function(socket) {
-		// TODO:
-		;
-	});
-	///}}}
-
 }
+// }}}
+
+// {{{ QueryStatus
+function QueryStatus(){ this.initialize.apply(this, arguments); }
+QueryStatus.prototype = {
+	initialize: function() {
+		this.id = QueryStatus.prototype.classSeqId++;
+		this.time = new Date();
+	},
+	end: function() {
+		this.time = (new Date()) - this.time;
+		// TODO: dbにでも放り込む
+		return this;
+	},
+	classSeqId: 0
+}
+// }}}
+
+// {{{ startLogger
+function startLogger(queryNum) {
+	var q = new QueryStatus();
+	return function() {
+		queryStatuses.push(q.end());
+	}
+}
+// }}}
 
 function createQueryObject(argv) {
 
-	// {{{いいかげん引数処理
+	// {{{ いいかげん引数処理
 	// TODO:getopt。
 	if (argv.length != 3){
+		params = null;
 		console.error('usage: node http-request.js url\n'
 				+ 'ex). node http-request.js http://example.com:8080/index.html');
 		process.exit(1);
@@ -95,14 +121,13 @@ function createQueryObject(argv) {
 	var headers = null;
 	/// }}}
 
-	// {{{query内容作成
-
+	// {{{ query内容作成
 	args.method = 'GET';
 	var agent = new http.Agent();
-	agent.maxSockets = concurrency;
+	agent.maxSockets = params.concurrency;
 
 	args.agent = agent;
-	if ( ! keepalive ) {
+	if ( ! params.keepalive ) {
 		args.headers = { Connection: 'close'};	
 	}
 	//}}}
@@ -110,6 +135,3 @@ function createQueryObject(argv) {
 	return args;
 }
 
-for(var i = 0; i < concurrency; i++){
-	get();
-}
