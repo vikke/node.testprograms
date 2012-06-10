@@ -6,12 +6,12 @@
 var http = require('http');
 var url = require('url');
 
-
 //{{{ 終了処理
-//process.on('uncaughtException', function (err) {
-//	console.log('Caught exception: ' + err);
-//	process.exit(10);
-//});
+process.on('uncaughtException', function (err) {
+	console.log('Caught exception: ');
+	console.log(err);
+	process.exit(10);
+});
 
 process.on('SIGINT', function (){
 	process.exit(2);
@@ -23,7 +23,8 @@ process.on('exit', function (){
 	console.log('------------------------');
 	console.log('ran: ' + params.ran + ' queries');
 	console.log('running time: ' + runningTime + 'ms ');
-	console.log(params.ran / runningTime * 1000 + 'q/s');
+	console.log(params.ran / runningTime * 1000 + ' q/s');
+	// TODO: queryStatusesかdbに入っている実行結果からreportを作成する。
 });
 //}}}
 
@@ -36,8 +37,8 @@ var params = {
 	res: 0
 };
 
-var queryStatuses = new Array();	
-var startTime = new Date();
+var queryStatuses = new Array();	// 実行結果
+var startTime = new Date();			// 実行開始日時
 // }}}
 
 var queryObject = createQueryObject(process.argv);
@@ -107,21 +108,13 @@ function startLogger(queryNum) {
 }
 // }}}
 
+// {{{ createQueryObject
 function createQueryObject(argv) {
 
-	// {{{ いいかげん引数処理
-	// TODO:getopt。
-	if (argv.length != 3){
-		params = null;
-		console.error('usage: node http-request.js url\n'
-				+ 'ex). node http-request.js http://example.com:8080/index.html');
-		process.exit(1);
-	}
-	var args = url.parse(argv[2]);
-	var headers = null;
-	/// }}}
+	var queryUrl = parseArgs(argv);
 
 	// {{{ query内容作成
+	var args = url.parse(queryUrl);
 	args.method = 'GET';
 	var agent = new http.Agent();
 	agent.maxSockets = params.concurrency;
@@ -134,4 +127,62 @@ function createQueryObject(argv) {
 	
 	return args;
 }
+// }}}
 
+// {{{ parseArgs
+function parseArgs(argv) {
+	var opt = require('getopt');
+
+	try{
+		opt.setopt('c::n::k', argv);
+		opt.getopt(function (o, p) {
+			switch (o) {
+				// TODO: 書き方が冗長。なんとかならん？
+				case 'c':
+					var val = parseInt(arrayLastValue(p));
+					if ( ! isNaN(val) ) {
+						params.concurrency = val;
+					}else{
+						throw new Object();
+					}
+					break;
+				case 'n':
+					var val = parseInt(arrayLastValue(p));
+					if ( ! isNaN(val)){
+						params.queryNum = val;
+					}else {
+						throw new Object();
+					}
+					break;
+				case 'k':
+					params.keepalive = true;
+					break;
+			}
+		});
+
+		var p = opt.params();
+		if (p.length != 3) {
+			throw new Object();
+		}
+
+		return p[2];
+
+	}catch (e) {
+		params = null;
+		console.error('usage: node http-request.js [options] url\n'
+				+ 'ex). node http-request.js http://example.com:8080/index.html\n'
+				+ 'options are:\n'
+				+ '    -n requests     Number of requests for perform\n'
+				+ '    -c concurrency  Number of multiple requests to make\n'
+				+ '    -k              Use HTTP KeepAlive feature\n'
+		);
+		process.exit(1);
+	}
+}
+// }}}
+
+// {{{ arrayLastValue
+function arrayLastValue(array){
+	return array[array.length - 1];	
+}
+// }}}
