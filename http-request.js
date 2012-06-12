@@ -100,7 +100,7 @@ QueryStatus.prototype = {
 // }}}
 
 // {{{ startLogger
-function startLogger(queryNum) {
+function startLogger() {
 	var q = new QueryStatus();
 	return function() {
 		queryStatuses.push(q.end());
